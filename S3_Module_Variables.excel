@@ -1,0 +1,35 @@
+Variable	Type	Required	Default	Expected Value / Description	Example
+bucket_name	string	Yes	-	Bucket name prefix. Account ID and region will be appended automatically.	myapp-logs
+force_destroy	bool	No	false	Allow Terraform to delete all objects in the bucket when destroying it.	true
+encryption_type	string	No	"AES256"		aws:kms
+kms_key_type	AES256.	No	"AWS_MANAGED"		CUSTOMER_MANAGED
+kms_key_alias	aws:kms	No	null		alias/s3-key
+bucket_key_enabled	aws:kms	No	true		
+enable_versioning	bool	No	true	Enable versioning for the S3 bucket.	true
+block_public_acls	bool	No	true	Block public ACLs.	
+ignore_public_acls	bool	No	true	Ignore public ACLs.	
+block_public_policy	bool	No	true	Block public bucket policies.	
+restrict_public_buckets	bool	No	true	Restrict public buckets.	
+object_ownership	string	No	"BucketOwnerEnforced"	S3 Object Ownership setting.	
+environment	string	Yes	-	Environment name.	
+project	string	Yes	-	Project name.	
+application	string	Yes	-	Application name.	
+owner	string	Yes	-	Application owner.	
+cost_center	string	Yes	-	Cost center.	
+additional_tags	map(string)	No	{}	Additional tags.	{Environment="dev"}
+enable_object_lock	bool	No	false	Enable object lock.	
+object_lock_mode	string	No	"GOVERNANCE"	Default retention mode for S3 Object Lock.	
+object_lock_days	number	No	null	Retention period in days.	
+enable_event_notifications	bool	No	false	Enable Amazon S3 Event Notifications.	
+event_notifications	"sns"	No	[]		
+enable_event_notifications	bool	No	false	Enable Amazon S3 Event Notifications.	
+event_notifications	"lambda"	No	[]		
+python_command	string	No	"python3"	Python executable used to run helper scripts.	
+enable_eventbridge_notifications	bool	No	false		
+static_website_type	null	No	null		
+website_index_document	string	No	null	Index document for Amazon S3 Static Website Hosting.	
+website_error_document	string	No	null	Error document for Amazon S3 Static Website Hosting.	
+redirect_host_name	string	No	null	Host name used when redirecting website requests.	
+redirect_protocol	string	No	null		
+enable_transfer_acceleration	bool	No	false	Enable S3 Transfer Acceleration.	
+enable_requester_pays	bool	No	false	Enable Requester Pays for the bucket.	

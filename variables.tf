@@ -34,24 +34,55 @@ variable "force_destroy" {
 }
 
 ##############################################################################
-# Server Side Encryption Configuration
+# Default Server-Side Encryption
 ##############################################################################
 
-variable "enable_kms_encryption" {
+variable "encryption_type" {
 
-  description = "Enable SSE-KMS encryption for the S3 bucket."
-  type        = bool
-  default     = false
+  description = "Specifies the default server-side encryption algorithm for the S3 bucket."
+
+  type    = string
+  default = "AES256"
 
 }
 
-variable "kms_key_arn" {
+##############################################################################
+# AWS KMS Key Type
+##############################################################################
 
-  description = "The ARN of the KMS key used for SSE-KMS encryption."
+variable "kms_key_type" {
+
+  description = "Specifies whether to use the AWS managed KMS key or a customer-managed KMS key."
+
+  type    = string
+  default = "AWS_MANAGED"
+
+}
+
+##############################################################################
+# Customer Managed KMS Key ARN
+##############################################################################
+
+variable "kms_key_alias" {
+
+  description = "Alias of the customer-managed AWS KMS key."
 
   type     = string
   default  = null
   nullable = true
+
+}
+
+##############################################################################
+# Amazon S3 Bucket Key
+##############################################################################
+
+variable "bucket_key_enabled" {
+
+  description = "Enable Amazon S3 Bucket Keys when using SSE-KMS."
+
+  type    = bool
+  default = true
 
 }
 
@@ -396,6 +427,16 @@ EOT
     error_message = "destination_arn cannot be empty."
 
   }
+
+}
+
+variable "python_command" {
+
+  description = "Python executable used by helper scripts."
+
+  type = string
+
+  default = "python3"
 
 }
 

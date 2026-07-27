@@ -4,7 +4,7 @@
 
 resource "aws_s3_bucket" "this" {
 
-  bucket = var.bucket_name
+  bucket = local.generated_bucket_name
 
   force_destroy = var.force_destroy
 
@@ -31,7 +31,7 @@ resource "aws_s3_bucket" "this" {
 }
 
 ##############################################################################
-# Server Side Encryption Configuration
+# Server-Side Encryption Configuration
 ##############################################################################
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
@@ -40,65 +40,97 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 
   lifecycle {
 
+    ##########################################################################
+    # Customer-managed KMS key validation
+    ##########################################################################
+
     precondition {
 
-      condition = (
+      condition = !(
+        var.kms_key_type == "CUSTOMER_MANAGED"
+        &&
+        (
+          var.encryption_type == "aws:kms"
+          ||
+          var.encryption_type == "aws:kms:dsse"
+        )
+        &&
+        try(length(trimspace(var.kms_key_alias)) == 0, true)
+      )
 
-        var.enable_kms_encryption == false ?
+      error_message = "kms_key_arn must be provided when using a customer-managed KMS key."
 
-        true :
+    }
 
-        try(
+    ##########################################################################
+    # Prevent unnecessary KMS options for SSE-S3
+    ##########################################################################
 
-          length(
-            trimspace(var.kms_key_arn)
-          ) > 0,
+    precondition {
 
-          false
+      condition = !(
+        var.encryption_type == "AES256"
+        &&
+        (
+          var.kms_key_type != "AWS_MANAGED"
+          ||
+          var.kms_key_alias != null
+        )
+      )
+
+      error_message = "kms_key_type and kms_key_arn are not applicable when encryption_type is AES256."
+
+    }
+
+  }
+
+  rule {
+
+    ##########################################################################
+    # Block SSE-C uploads
+    ##########################################################################
+
+    blocked_encryption_types = ["SSE-C"]
+
+    ##########################################################################
+    # Amazon S3 Bucket Keys
+    ##########################################################################
+
+    bucket_key_enabled = (
+      var.encryption_type == "aws:kms"
+      ? var.bucket_key_enabled
+      : false
+    )
+
+    ##########################################################################
+    # Default Encryption
+    ##########################################################################
+
+    apply_server_side_encryption_by_default {
+
+      sse_algorithm = var.encryption_type
+
+      kms_master_key_id = (
+
+        var.encryption_type == "AES256"
+
+        ? null
+
+        : (
+
+          var.kms_key_type == "CUSTOMER_MANAGED"
+
+          ? data.aws_kms_key.customer[0].arn
+
+          : null
 
         )
 
       )
 
-      error_message = "kms_key_arn must be provided when enable_kms_encryption is true."
-
     }
 
   }
-
-
-  rule {
-
-    bucket_key_enabled = var.enable_kms_encryption
-
-
-    apply_server_side_encryption_by_default {
-
-      sse_algorithm = (
-
-        var.enable_kms_encryption ?
-
-        "aws:kms" :
-
-        "AES256"
-
-      )
-
-
-      kms_master_key_id = (
-
-        var.enable_kms_encryption ?
-
-        var.kms_key_arn :
-
-        null
-
-      )
-
-    }
-
-  }
-
 
   depends_on = [
     aws_s3_bucket.this
@@ -419,13 +451,8 @@ resource "aws_s3_bucket_notification" "this" {
   count = (
 
     var.enable_event_notifications ||
-    var.enable_event_notifications ?
-
-    1 :
-
-    0
-
-  )
+    var.enable_eventbridge_notifications
+  ) ? 1 : 0
 
   bucket = aws_s3_bucket.this.id
   ###########################################################################
@@ -456,8 +483,8 @@ resource "aws_s3_bucket_notification" "this" {
   # Amazon EventBridge Notifications
   ##############################################################################
 
-  eventbridge=var.enable_eventbridge_notifications
-  
+  eventbridge = var.enable_eventbridge_notifications
+
   ###########################################################################
   # SNS Notifications
   ###########################################################################
@@ -564,11 +591,105 @@ resource "aws_s3_bucket_notification" "this" {
   depends_on = [
 
     aws_s3_bucket.this,
-    aws_s3_bucket_versioning.this
-
+    aws_s3_bucket_versioning.this,
+    aws_lambda_permission.s3_notification,
+    terraform_data.sqs_permission,
+    terraform_data.sns_permission
   ]
+}
+
+##############################################################################
+# Lambda Permissions
+##############################################################################
+
+resource "aws_lambda_permission" "s3_notification" {
+
+  for_each = {
+
+    for index, notification in var.event_notifications :
+
+    index => notification
+
+    if(
+      var.enable_event_notifications &&
+      lower(notification.destination_type) == "lambda" &&
+      try(notification.manage_permission, true)
+    )
+
+  }
+
+  statement_id = format(
+    "AllowExecutionFromS3-%s",
+    replace(aws_s3_bucket.this.bucket, ".", "-")
+  )
+
+  action = "lambda:InvokeFunction"
+
+  function_name = each.value.destination_arn
+
+  principal = "s3.amazonaws.com"
+
+  source_arn = aws_s3_bucket.this.arn
 
 }
+
+resource "terraform_data" "sqs_permission" {
+
+  for_each = {
+
+    for idx, notification in var.event_notifications :
+
+    idx => notification
+
+    if lower(notification.destination_type) == "sqs"
+
+    && try(notification.manage_permission, true)
+
+  }
+
+  triggers_replace = {
+
+    bucket_name = aws_s3_bucket.this.bucket
+
+    bucket_arn = aws_s3_bucket.this.arn
+
+    queue_arn = each.value.destination_arn
+
+  }
+
+  provisioner "local-exec" {
+
+    interpreter = ["PowerShell", "-Command"]
+
+    command = "& ${var.python_command} '${abspath(path.module)}/scripts/merge_sqs_policy.py' --bucket-name '${aws_s3_bucket.this.bucket}' --bucket-arn '${aws_s3_bucket.this.arn}' --queue-arn '${each.value.destination_arn}' --region '${data.aws_region.current.region}'"
+  }
+
+}
+
+resource "terraform_data" "sns_permission" {
+
+  for_each = {
+    for idx, notification in var.event_notifications :
+    idx => notification
+
+    if lower(notification.destination_type) == "sns"
+    && try(notification.manage_permission, true)
+  }
+
+  triggers_replace = {
+    bucket_name = aws_s3_bucket.this.bucket
+    bucket_arn  = aws_s3_bucket.this.arn
+    topic_arn   = each.value.destination_arn
+  }
+
+  provisioner "local-exec" {
+
+    interpreter = ["PowerShell", "-Command"]
+
+    command = "& ${var.python_command} '${abspath(path.module)}/scripts/merge_sns_policy.py' --bucket-name '${aws_s3_bucket.this.bucket}' --bucket-arn '${aws_s3_bucket.this.arn}' --topic-arn '${each.value.destination_arn}' --region '${data.aws_region.current.region}'"
+  }
+}
+
 ##############################################################################
 # Transfer Acceleration Configuration
 ##############################################################################
@@ -594,7 +715,6 @@ resource "aws_s3_bucket_accelerate_configuration" "this" {
   ]
 
 }
-
 
 
 ##############################################################################

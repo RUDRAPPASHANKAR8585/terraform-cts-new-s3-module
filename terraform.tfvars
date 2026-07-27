@@ -27,9 +27,16 @@ additional_tags = {}
 # Encryption
 #################################
 
-enable_kms_encryption = true
+#################################
+# Default Encryption
+#################################
+encryption_type = "aws:kms:dsse"
 
-kms_key_arn = "arn:aws:kms:ap-south-1:700030738273:key/mrk-2e9773e9031f4e6a8048093552558727"
+kms_key_type = "CUSTOMER_MANAGED"
+
+kms_key_alias = "poc/kms"
+
+bucket_key_enabled = true
 
 #################################
 # Versioning
@@ -83,13 +90,13 @@ redirect_protocol = "https"
 #################################
 
 enable_event_notifications = true
+
 event_notifications = [
 
   {
+    destination_type = "lambda"
 
-    destination_type = "sns"
-
-    destination_arn = "arn:aws:sns:ap-south-1:700030738273:poc-s3"
+    destination_arn = "arn:aws:lambda:ap-south-1:700030738273:function:s3-poc"
 
     events = [
 
@@ -97,16 +104,12 @@ event_notifications = [
 
     ]
 
-    filter_prefix = "images/"
-
-    filter_suffix = ".jpg"
-
+    manage_permission = true
   },
   {
-
     destination_type = "sqs"
 
-    destination_arn = "arn:aws:sqs:ap-south-1:700030738273:s3-poc"
+    destination_arn = "arn:aws:sqs:ap-south-1:700030738273:cts-poc-s3-notify"
 
     events = [
 
@@ -118,12 +121,12 @@ event_notifications = [
 
     filter_suffix = ".jpg"
 
+    manage_permission = true
   },
   {
+    destination_type = "sns"
 
-    destination_type = "lambda"
-
-    destination_arn = "arn:aws:lambda:ap-south-1:700030738273:function:s3-poc"
+    destination_arn = "arn:aws:sns:ap-south-1:700030738273:poc-s3"
 
     events = [
 
@@ -135,11 +138,13 @@ event_notifications = [
 
     filter_suffix = ".jpg"
 
+    manage_permission = false
   }
-
 ]
 
 enable_eventbridge_notifications = true
+
+python_command = "python"
 
 #################################
 # Transfer Acceleration

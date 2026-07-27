@@ -1,6 +1,6 @@
 module "s3" {
 
-  source = "./module/s3"
+  source = "./module/s3/"
 
   #################################
   # Bucket Configuration
@@ -26,9 +26,13 @@ module "s3" {
   # Encryption
   #################################
 
-  enable_kms_encryption = var.enable_kms_encryption
+  encryption_type = var.encryption_type
 
-  kms_key_arn = var.kms_key_arn
+  kms_key_type = var.kms_key_type
+
+  kms_key_alias = var.kms_key_alias
+
+  bucket_key_enabled = var.bucket_key_enabled
 
   #################################
   # Versioning
@@ -74,6 +78,8 @@ module "s3" {
   event_notifications = var.event_notifications
 
   enable_eventbridge_notifications = var.enable_eventbridge_notifications
+
+  python_command = var.python_command
 
 
   #################################
